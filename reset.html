@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Resetting Game...</title>
+</head>
+<body>
+    <h1>Resetting your game data...</h1>
+    <script>
+        // Clear all game data
+        localStorage.removeItem('samuraiUnlockedChars');
+        localStorage.removeItem('samuraiSelectedChar');
+        localStorage.removeItem('samuraiCharXP');
+        localStorage.removeItem('samuraiCharSkills');
+        localStorage.removeItem('samuraiStarterChosen');
+        localStorage.removeItem('archerWin');
+        localStorage.removeItem('pikemanWin');
+        localStorage.removeItem('samuraiUnlockedMaps');
+        localStorage.removeItem('samuraiSelectedMap');
+        localStorage.removeItem('samuraiUnlockedRelics');
+        localStorage.removeItem('samuraiActiveRelics');
+        localStorage.removeItem('samuraiActiveQuest');
+        localStorage.removeItem('samuraiQuestProgress');
+        localStorage.removeItem('samuraiQuestSelection');
+        localStorage.removeItem('samuraiCompletedQuests');
+        localStorage.removeItem('samuraiQuestRefreshes');
+
+        alert('Game reset complete! You will now start fresh with the starter choice.');
+
+        // Redirect to game
+        window.location.href = 'index.html';
+    </script>
+</body>
+</html>
