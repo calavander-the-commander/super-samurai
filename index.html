@@ -4202,6 +4202,10 @@
             applyMapTheme(selectedMap);
             rebuildEnvironment();
 
+            // Clear and spawn fresh animals
+            clearAnimals();
+            spawnAnimals(3); // Start with a few animals
+
             // Apply selected character's base stats
             const char = characters[selectedCharacter];
             Object.assign(playerStats, {
@@ -5825,6 +5829,196 @@
         gridMesh = new THREE.GridHelper(200, 40, currentMap.gridColor, currentMap.gridColor);
         gridMesh.position.y = 0.01;
         scene.add(gridMesh);
+
+        // Spawn beam at center of map
+        let spawnBeam = null;
+        let spawnBeamGlow = null;
+        function createSpawnBeam() {
+            // Main beam cylinder
+            const beamGeo = new THREE.CylinderGeometry(0.5, 0.5, 100, 16);
+            const beamMat = new THREE.MeshBasicMaterial({
+                color: 0x00ffff,
+                transparent: true,
+                opacity: 0.3
+            });
+            spawnBeam = new THREE.Mesh(beamGeo, beamMat);
+            spawnBeam.position.set(0, 50, 0);
+            scene.add(spawnBeam);
+
+            // Inner glow beam
+            const glowGeo = new THREE.CylinderGeometry(0.2, 0.2, 100, 8);
+            const glowMat = new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.6
+            });
+            spawnBeamGlow = new THREE.Mesh(glowGeo, glowMat);
+            spawnBeamGlow.position.set(0, 50, 0);
+            scene.add(spawnBeamGlow);
+
+            // Base ring
+            const ringGeo = new THREE.TorusGeometry(2, 0.2, 8, 32);
+            const ringMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+            const baseRing = new THREE.Mesh(ringGeo, ringMat);
+            baseRing.rotation.x = Math.PI / 2;
+            baseRing.position.set(0, 0.1, 0);
+            scene.add(baseRing);
+            spawnBeam.baseRing = baseRing;
+        }
+        createSpawnBeam();
+
+        // Animals system
+        const animals = [];
+        const animalTypes = ['rabbit', 'deer', 'bird', 'fox'];
+
+        function createAnimal(type) {
+            const animal = new THREE.Group();
+            let animalData = { type: type, speed: 2, mesh: animal };
+
+            if (type === 'rabbit') {
+                // Small rabbit
+                const bodyGeo = new THREE.SphereGeometry(0.3, 8, 6);
+                const bodyMat = new THREE.MeshLambertMaterial({ color: 0xccaa88 });
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                body.position.y = 0.3;
+                body.scale.set(1, 0.8, 1.2);
+                animal.add(body);
+                // Head
+                const headGeo = new THREE.SphereGeometry(0.2, 8, 6);
+                const head = new THREE.Mesh(headGeo, bodyMat);
+                head.position.set(0, 0.45, 0.25);
+                animal.add(head);
+                // Ears
+                const earGeo = new THREE.BoxGeometry(0.06, 0.25, 0.04);
+                const ear1 = new THREE.Mesh(earGeo, bodyMat);
+                ear1.position.set(-0.08, 0.7, 0.2);
+                animal.add(ear1);
+                const ear2 = ear1.clone();
+                ear2.position.x = 0.08;
+                animal.add(ear2);
+                animalData.speed = 4;
+            } else if (type === 'deer') {
+                // Deer body
+                const bodyGeo = new THREE.BoxGeometry(0.5, 0.6, 1);
+                const bodyMat = new THREE.MeshLambertMaterial({ color: 0x8b6914 });
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                body.position.y = 0.8;
+                animal.add(body);
+                // Head
+                const headGeo = new THREE.BoxGeometry(0.25, 0.3, 0.4);
+                const head = new THREE.Mesh(headGeo, bodyMat);
+                head.position.set(0, 1.1, 0.6);
+                animal.add(head);
+                // Legs
+                const legGeo = new THREE.BoxGeometry(0.1, 0.5, 0.1);
+                const legMat = new THREE.MeshLambertMaterial({ color: 0x6b4914 });
+                for (let i = 0; i < 4; i++) {
+                    const leg = new THREE.Mesh(legGeo, legMat);
+                    leg.position.set((i % 2 === 0 ? -0.15 : 0.15), 0.25, (i < 2 ? 0.35 : -0.35));
+                    animal.add(leg);
+                }
+                animalData.speed = 3;
+            } else if (type === 'bird') {
+                // Bird body
+                const bodyGeo = new THREE.SphereGeometry(0.15, 8, 6);
+                const bodyMat = new THREE.MeshLambertMaterial({ color: 0x4488ff });
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                body.position.y = 2;
+                body.scale.set(1, 0.8, 1.3);
+                animal.add(body);
+                // Wings
+                const wingGeo = new THREE.BoxGeometry(0.4, 0.02, 0.15);
+                const wing1 = new THREE.Mesh(wingGeo, bodyMat);
+                wing1.position.set(-0.2, 2, 0);
+                animal.add(wing1);
+                const wing2 = wing1.clone();
+                wing2.position.x = 0.2;
+                animal.add(wing2);
+                animalData.speed = 5;
+                animalData.flying = true;
+            } else if (type === 'fox') {
+                // Fox body
+                const bodyGeo = new THREE.BoxGeometry(0.35, 0.35, 0.7);
+                const bodyMat = new THREE.MeshLambertMaterial({ color: 0xff6600 });
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                body.position.y = 0.4;
+                animal.add(body);
+                // Head
+                const headGeo = new THREE.BoxGeometry(0.25, 0.2, 0.3);
+                const head = new THREE.Mesh(headGeo, bodyMat);
+                head.position.set(0, 0.5, 0.4);
+                animal.add(head);
+                // Tail
+                const tailGeo = new THREE.BoxGeometry(0.15, 0.15, 0.5);
+                const tailMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+                const tail = new THREE.Mesh(tailGeo, tailMat);
+                tail.position.set(0, 0.4, -0.5);
+                tail.rotation.x = 0.3;
+                animal.add(tail);
+                animalData.speed = 3.5;
+            }
+
+            // Random spawn position (away from center)
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 20 + Math.random() * 30;
+            animal.position.set(Math.cos(angle) * dist, 0, Math.sin(angle) * dist);
+
+            animalData.targetX = animal.position.x;
+            animalData.targetZ = animal.position.z;
+            animalData.wanderTimer = Math.random() * 5;
+
+            scene.add(animal);
+            return animalData;
+        }
+
+        function spawnAnimals(count = 5) {
+            for (let i = 0; i < count; i++) {
+                const type = animalTypes[Math.floor(Math.random() * animalTypes.length)];
+                animals.push(createAnimal(type));
+            }
+        }
+
+        function updateAnimals(deltaTime) {
+            for (const animal of animals) {
+                // Update wander timer
+                animal.wanderTimer -= deltaTime;
+                if (animal.wanderTimer <= 0) {
+                    // Pick new target
+                    const angle = Math.random() * Math.PI * 2;
+                    const dist = 5 + Math.random() * 15;
+                    animal.targetX = animal.mesh.position.x + Math.cos(angle) * dist;
+                    animal.targetZ = animal.mesh.position.z + Math.sin(angle) * dist;
+                    // Keep in bounds
+                    animal.targetX = Math.max(-80, Math.min(80, animal.targetX));
+                    animal.targetZ = Math.max(-80, Math.min(80, animal.targetZ));
+                    animal.wanderTimer = 3 + Math.random() * 5;
+                }
+
+                // Move toward target
+                const dx = animal.targetX - animal.mesh.position.x;
+                const dz = animal.targetZ - animal.mesh.position.z;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+
+                if (dist > 0.5) {
+                    animal.mesh.position.x += (dx / dist) * animal.speed * deltaTime;
+                    animal.mesh.position.z += (dz / dist) * animal.speed * deltaTime;
+                    // Face movement direction
+                    animal.mesh.rotation.y = Math.atan2(dx, dz);
+                }
+
+                // Birds bob up and down
+                if (animal.flying) {
+                    animal.mesh.position.y = 2 + Math.sin(Date.now() * 0.003) * 0.5;
+                }
+            }
+        }
+
+        function clearAnimals() {
+            for (const animal of animals) {
+                scene.remove(animal.mesh);
+            }
+            animals.length = 0;
+        }
 
         // Function to apply map theme
         function applyMapTheme(mapId) {
@@ -12139,6 +12333,12 @@
             });
             waveNumberEl.textContent = waveNum;
             updateEnemyCount();
+
+            // Spawn some animals each wave (if not too many already)
+            if (animals.length < 10) {
+                const animalCount = Math.floor(Math.random() * 3) + 1; // 1-3 animals
+                spawnAnimals(animalCount);
+            }
         }
 
         // Function to update enemy count display
@@ -12736,6 +12936,18 @@
 
             // Update gibs
             updateGibs(deltaTime);
+
+            // Update animals
+            updateAnimals(deltaTime);
+
+            // Animate spawn beam
+            if (spawnBeam && spawnBeamGlow) {
+                spawnBeam.material.opacity = 0.2 + Math.sin(Date.now() * 0.003) * 0.1;
+                spawnBeamGlow.material.opacity = 0.4 + Math.sin(Date.now() * 0.005) * 0.2;
+                if (spawnBeam.baseRing) {
+                    spawnBeam.baseRing.rotation.z += deltaTime * 0.5;
+                }
+            }
 
             // Update spirit ally
             if (spiritMesh) {

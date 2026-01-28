@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(start \"\" \"C:\\\\Users\\\\jonat\\\\OneDrive\\\\Desktop\\\\Coding\\\\game2\\\\index.html\")",
+      "Bash(node:*)"
+    ]
+  }
+}
