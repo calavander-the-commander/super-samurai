@@ -592,6 +592,10 @@
         #cardContainer {
             display: flex;
             gap: 30px;
+            position: relative;
+            flex-wrap: wrap;
+            justify-content: center;
+            padding-bottom: 100px;
         }
         .card {
             width: 200px;
@@ -651,6 +655,32 @@
             font-size: 11px;
             margin-top: 10px;
         }
+        .build-button {
+            width: 120px;
+            height: 50px;
+            background: linear-gradient(135deg, #2a5a2a, #1a3a1a);
+            border: 3px solid #4a8a4a;
+            border-radius: 10px;
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 20px;
+            transition: all 0.3s;
+            position: absolute;
+            bottom: -80px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        .build-button:hover {
+            background: linear-gradient(135deg, #3a7a3a, #2a5a2a);
+            border-color: #6aba6a;
+            box-shadow: 0 0 15px #4a8a4a66;
+        }
         /* Stats Display */
         #statsDisplay {
             position: absolute;
@@ -662,6 +692,75 @@
             border-radius: 8px;
             font-size: 12px;
             pointer-events: none;
+        }
+        /* Resource Display */
+        #resourceDisplay {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: white;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: monospace;
+            border: 1px solid #555;
+        }
+        #resourceDisplay .resource {
+            margin: 4px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        #resourceDisplay .resource-icon {
+            width: 20px;
+            text-align: center;
+        }
+        /* Build Mode */
+        #buildMode {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        #buildMode.hidden { display: none; }
+        #buildBar {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(20, 20, 30, 0.95);
+            border: 2px solid #4488ff;
+            border-radius: 12px;
+            padding: 20px 40px;
+            text-align: center;
+            pointer-events: auto;
+        }
+        #buildBar .build-title {
+            color: #4488ff;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        #buildBar .build-info {
+            color: #888;
+            font-size: 14px;
+        }
+        #buildResources {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(20, 20, 30, 0.95);
+            border: 2px solid #4488ff;
+            border-radius: 8px;
+            padding: 15px 20px;
+            font-size: 18px;
+            color: white;
+            display: flex;
+            gap: 20px;
         }
         /* Relics Display */
         #relicsPanel {
@@ -1722,11 +1821,107 @@
             </div>
         </div>
         <div id="statsDisplay"></div>
+        <div id="resourceDisplay">
+            <div class="resource"><span class="resource-icon">🪵</span> Wood: <span id="woodCount">0</span></div>
+            <div class="resource"><span class="resource-icon">⛏️</span> Ore: <span id="oreCount">0</span></div>
+            <div class="resource"><span class="resource-icon">🪨</span> Rock: <span id="rockCount">0</span></div>
+            <div class="resource"><span class="resource-icon">🍖</span> Food: <span id="foodCount">0</span></div>
+        </div>
+        <div id="buildMode" class="hidden">
+            <div id="buildBar">
+                <div class="build-title">Build Mode</div>
+                <div class="build-info">Coming Soon - Press ESC to exit</div>
+            </div>
+            <div id="buildResources">
+                <span>🪵 <span id="buildWood">0</span></span>
+                <span>⛏️ <span id="buildOre">0</span></span>
+                <span>🪨 <span id="buildRock">0</span></span>
+                <span>🍖 <span id="buildFood">0</span></span>
+            </div>
+        </div>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
         // ========== GAME STATE MANAGEMENT ==========
-        let gameState = 'home'; // 'home', 'playing', 'cardSelection', 'gameOver'
+        let gameState = 'home'; // 'home', 'playing', 'cardSelection', 'gameOver', 'building'
+
+        // ========== RESOURCE SYSTEM ==========
+        let resources = {
+            wood: 0,
+            ore: 0,
+            rock: 0,
+            food: 0
+        };
+
+        function updateResourceDisplay() {
+            document.getElementById('woodCount').textContent = resources.wood;
+            document.getElementById('oreCount').textContent = resources.ore;
+            document.getElementById('rockCount').textContent = resources.rock;
+            document.getElementById('foodCount').textContent = resources.food;
+        }
+
+        function addResource(type, amount) {
+            resources[type] = (resources[type] || 0) + amount;
+            updateResourceDisplay();
+            // Show floating text
+            showResourceGain(type, amount);
+        }
+
+        function showResourceGain(type, amount) {
+            const icons = { wood: '🪵', ore: '⛏️', rock: '🪨', food: '🍖' };
+            showAbilityEffect(`+${amount} ${icons[type]}`);
+        }
+
+        function resetResources() {
+            resources = { wood: 0, ore: 0, rock: 0, food: 0 };
+            updateResourceDisplay();
+        }
+
+        // ========== BUILD MODE ==========
+        let buildModeCamera = null;
+        let normalCameraState = null;
+
+        function enterBuildMode() {
+            gameState = 'building';
+            document.exitPointerLock();
+
+            // Show build mode UI
+            document.getElementById('buildMode').classList.remove('hidden');
+            document.getElementById('resourceDisplay').style.display = 'none';
+
+            // Update build mode resource display
+            document.getElementById('buildWood').textContent = resources.wood;
+            document.getElementById('buildOre').textContent = resources.ore;
+            document.getElementById('buildRock').textContent = resources.rock;
+            document.getElementById('buildFood').textContent = resources.food;
+
+            // Save normal camera state
+            normalCameraState = {
+                position: camera.position.clone(),
+                rotation: camera.rotation.clone()
+            };
+
+            // Move camera to bird's eye view
+            camera.position.set(player.position.x, 50, player.position.z + 30);
+            camera.lookAt(player.position.x, 0, player.position.z);
+        }
+
+        function exitBuildMode() {
+            gameState = 'cardSelection';
+
+            // Hide build mode UI
+            document.getElementById('buildMode').classList.add('hidden');
+            document.getElementById('resourceDisplay').style.display = 'block';
+
+            // Restore camera
+            if (normalCameraState) {
+                camera.position.copy(normalCameraState.position);
+                camera.rotation.copy(normalCameraState.rotation);
+            }
+
+            // Re-show card selection
+            showCardSelection();
+        }
 
         // ========== CHARACTER SYSTEM ==========
         // Characters unlock progressively: Standard -> Knight -> Thrower -> Assassin
@@ -4023,6 +4218,16 @@
                 cardEl.addEventListener('click', () => selectCard(card));
                 container.appendChild(cardEl);
             });
+
+            // Add Build button below cards
+            const buildBtn = document.createElement('div');
+            buildBtn.className = 'build-button';
+            buildBtn.innerHTML = '🏗️ Build';
+            buildBtn.addEventListener('click', () => {
+                document.getElementById('cardOverlay').classList.add('hidden');
+                enterBuildMode();
+            });
+            container.appendChild(buildBtn);
         }
 
         function selectCard(card) {
@@ -5966,6 +6171,10 @@
             animalData.targetX = animal.position.x;
             animalData.targetZ = animal.position.z;
             animalData.wanderTimer = Math.random() * 5;
+
+            // Add health for hunting
+            animalData.health = type === 'deer' ? 20 : type === 'fox' ? 15 : type === 'bird' ? 5 : 10;
+            animalData.foodAmount = type === 'deer' ? 5 : type === 'fox' ? 3 : type === 'bird' ? 1 : 2;
 
             scene.add(animal);
             return animalData;
@@ -12335,8 +12544,8 @@
             updateEnemyCount();
 
             // Spawn some animals each wave (if not too many already)
-            if (animals.length < 10) {
-                const animalCount = Math.floor(Math.random() * 3) + 1; // 1-3 animals
+            if (animals.length < 6) {
+                const animalCount = Math.floor(Math.random() * 2) + 1; // 1-2 animals
                 spawnAnimals(animalCount);
             }
         }
@@ -12552,6 +12761,147 @@
                             enemies.splice(i, 1);
                             onEnemyKilled(enemy);
                             updateEnemyCount();
+                        }
+                    }
+                }
+            }
+
+            // Also check for harvestable obstacles
+            harvestObstacles();
+
+            // Also check for huntable animals
+            attackAnimals();
+        }
+
+        // Harvest resources from obstacles
+        function harvestObstacles() {
+            const effectiveRange = baseAttackRange * playerStats.attackRange;
+            const now = performance.now();
+
+            for (const obstacle of obstacles) {
+                // Check harvest cooldown (2 second per obstacle)
+                if (obstacle.lastHarvest && now - obstacle.lastHarvest < 2000) continue;
+
+                // Calculate distance to obstacle
+                const dx = obstacle.x - player.position.x;
+                const dz = obstacle.z - player.position.z;
+                const distance = Math.sqrt(dx * dx + dz * dz);
+
+                // Check if in range
+                if (distance <= effectiveRange + obstacle.radius) {
+                    // Check if obstacle is in front of player (within attack cone)
+                    const angleToObstacle = Math.atan2(-dx, -dz);
+                    let angleDiff = angleToObstacle - cameraRotationY;
+
+                    // Normalize angle difference
+                    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+                    if (Math.abs(angleDiff) <= attackAngle / 2) {
+                        // Mark as harvested (cooldown)
+                        obstacle.lastHarvest = now;
+
+                        // Determine resource type based on obstacle type
+                        let resourceType = null;
+                        let amount = 1;
+
+                        switch(obstacle.type) {
+                            case 'tree':
+                                resourceType = 'wood';
+                                amount = 2;
+                                break;
+                            case 'giantTree':
+                                resourceType = 'wood';
+                                amount = 5;
+                                break;
+                            case 'log':
+                                resourceType = 'wood';
+                                amount = 1;
+                                break;
+                            case 'boulder':
+                                resourceType = 'ore';
+                                amount = 3;
+                                break;
+                            case 'rock':
+                                resourceType = 'rock';
+                                amount = 2;
+                                break;
+                            case 'platform':
+                                resourceType = 'rock';
+                                amount = 1;
+                                break;
+                        }
+
+                        if (resourceType) {
+                            addResource(resourceType, amount);
+
+                            // Visual feedback - shake the obstacle
+                            if (obstacle.mesh) {
+                                const originalX = obstacle.mesh.position.x;
+                                const originalZ = obstacle.mesh.position.z;
+                                const shakeIntensity = 0.1;
+                                let shakeTime = 0;
+                                const shakeInterval = setInterval(() => {
+                                    shakeTime += 50;
+                                    if (shakeTime >= 200) {
+                                        obstacle.mesh.position.x = originalX;
+                                        obstacle.mesh.position.z = originalZ;
+                                        clearInterval(shakeInterval);
+                                    } else {
+                                        obstacle.mesh.position.x = originalX + (Math.random() - 0.5) * shakeIntensity;
+                                        obstacle.mesh.position.z = originalZ + (Math.random() - 0.5) * shakeIntensity;
+                                    }
+                                }, 50);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Attack animals for food
+        function attackAnimals() {
+            const effectiveRange = baseAttackRange * playerStats.attackRange;
+            let baseDamage = Math.floor(Math.random() * 6) + 5;
+            baseDamage *= playerStats.damage;
+
+            for (let i = animals.length - 1; i >= 0; i--) {
+                const animal = animals[i];
+
+                // Calculate distance to animal
+                const dx = animal.mesh.position.x - player.position.x;
+                const dz = animal.mesh.position.z - player.position.z;
+                const distance = Math.sqrt(dx * dx + dz * dz);
+
+                // Check if in range
+                if (distance <= effectiveRange + 1) {
+                    // Check if animal is in front of player (within attack cone)
+                    const angleToAnimal = Math.atan2(-dx, -dz);
+                    let angleDiff = angleToAnimal - cameraRotationY;
+
+                    // Normalize angle difference
+                    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+                    if (Math.abs(angleDiff) <= attackAngle / 2) {
+                        // Hit the animal
+                        animal.health -= baseDamage;
+
+                        // Flash red
+                        animal.mesh.children.forEach(child => {
+                            if (child.material && child.material.emissive) {
+                                child.material.emissive.setHex(0xff0000);
+                                setTimeout(() => {
+                                    child.material.emissive.setHex(0x000000);
+                                }, 100);
+                            }
+                        });
+
+                        // Check if dead
+                        if (animal.health <= 0) {
+                            addResource('food', animal.foodAmount);
+                            scene.remove(animal.mesh);
+                            animals.splice(i, 1);
                         }
                     }
                 }
@@ -13224,6 +13574,10 @@
             }
             if (key === 'e' && gameState === 'playing' && currentRunCharacter === 'necromancer') {
                 summonSkeletonArcher();
+            }
+            // ESC to exit build mode
+            if (e.key === 'Escape' && gameState === 'building') {
+                exitBuildMode();
             }
         });
 
