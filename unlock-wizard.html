@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Unlocking Wizard...</title>
+</head>
+<body>
+    <h1>Unlocking Wizard character...</h1>
+    <script>
+        // Get current unlocked characters
+        let unlockedCharacters = JSON.parse(localStorage.getItem('samuraiUnlockedChars')) || ['standard'];
+
+        // Add wizard if not already unlocked
+        if (!unlockedCharacters.includes('wizard')) {
+            unlockedCharacters.push('wizard');
+            localStorage.setItem('samuraiUnlockedChars', JSON.stringify(unlockedCharacters));
+            alert('Wizard unlocked! You can now select the Wizard character.');
+        } else {
+            alert('Wizard was already unlocked!');
+        }
+
+        // Redirect to game
+        window.location.href = 'index.html';
+    </script>
+</body>
+</html>

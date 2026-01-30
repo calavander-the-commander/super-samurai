@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Resetting Relics...</title>
+</head>
+<body>
+    <h1>Resetting your relics...</h1>
+    <script>
+        // Clear relic data
+        localStorage.setItem('samuraiUnlockedRelics', JSON.stringify([]));
+        localStorage.setItem('samuraiActiveRelics', JSON.stringify([]));
+
+        alert('Relics reset! You now have 0 relics unlocked and 0 active.');
+
+        // Redirect to game
+        window.location.href = 'index.html';
+    </script>
+</body>
+</html>

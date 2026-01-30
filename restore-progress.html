@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Restoring Progress...</title>
+</head>
+<body>
+    <h1>Restoring your game progress...</h1>
+    <script>
+        // Restore unlocked characters
+        const unlockedChars = ['standard', 'archer', 'pikeman', 'wizard', 'knight', 'necromancer'];
+        localStorage.setItem('samuraiUnlockedChars', JSON.stringify(unlockedChars));
+
+        // Restore character XP
+        const charXP = {
+            standard: 1000,
+            knight: 1000,
+            archer: 1000,
+            pikeman: 1500,
+            wizard: 1000,
+            necromancer: 500
+        };
+        localStorage.setItem('samuraiCharXP', JSON.stringify(charXP));
+
+        // Set selected character (pikeman since highest XP)
+        localStorage.setItem('samuraiSelectedChar', 'pikeman');
+
+        // Mark starter as chosen
+        localStorage.setItem('samuraiStarterChosen', 'true');
+
+        // Unlock first two maps (forest is default, unlock frost)
+        const unlockedMaps = ['forest', 'frost'];
+        localStorage.setItem('samuraiUnlockedMaps', JSON.stringify(unlockedMaps));
+
+        // Restore relics from first two maps (forest and frost relics)
+        const unlockedRelics = ['forest', 'frost'];
+        localStorage.setItem('samuraiUnlockedRelics', JSON.stringify(unlockedRelics));
+        localStorage.setItem('samuraiActiveRelics', JSON.stringify([]));
+
+        // Mark the quests that gave these relics as completed
+        const completedQuests = ['q5', 'q6']; // Survivor (wave 5) and Endurance (wave 10)
+        localStorage.setItem('samuraiCompletedQuests', JSON.stringify(completedQuests));
+
+        alert('Progress restored!\n\nUnlocked Characters: Standard, Archer, Pikeman, Wizard, Knight, Necromancer\n\nXP: Pikeman 1500, Necromancer 500, Others 1000\n\nRelics: Heart of the Grove, Permafrost Shard\n\nMaps: Forest, Frost');
+
+        // Redirect to game
+        window.location.href = 'index.html';
+    </script>
+</body>
+</html>
