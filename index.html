@@ -1745,27 +1745,27 @@
 
         /* Account System Styles */
         #accountButton {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: linear-gradient(135deg, #2a2a4a, #1a1a2e);
-            border: 2px solid #ffd700;
-            border-radius: 8px;
-            padding: 8px 16px;
+            position: fixed;
+            top: 8px;
+            right: 8px;
+            background: rgba(26, 26, 46, 0.9);
+            border: 1px solid #ffd700;
+            border-radius: 6px;
+            padding: 5px 10px;
             color: #ffd700;
-            font-size: 14px;
+            font-size: 12px;
             cursor: pointer;
-            z-index: 100;
+            z-index: 500;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 5px;
         }
         #accountButton:hover {
-            background: linear-gradient(135deg, #3a3a5a, #2a2a3e);
-            box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+            background: rgba(42, 42, 74, 0.95);
+            box-shadow: 0 0 8px rgba(255, 215, 0, 0.4);
         }
-        #accountButton .account-icon { font-size: 18px; }
-        #accountButton .account-name { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #accountButton .account-icon { font-size: 14px; }
+        #accountButton .account-name { max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 
         #accountOverlay {
             position: fixed;
@@ -1862,7 +1862,7 @@
             text-align: center;
         }
         #createAccountDialog h3 { color: #ffd700; margin-bottom: 20px; }
-        #createAccountDialog input {
+        #createAccountDialog input, #passwordDialog input {
             width: 250px;
             padding: 12px;
             border: 2px solid #ffd700;
@@ -1871,9 +1871,29 @@
             color: #fff;
             font-size: 16px;
             text-align: center;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
+            display: block;
         }
-        #createAccountDialog input:focus { outline: none; box-shadow: 0 0 10px rgba(255, 215, 0, 0.3); }
+        #createAccountDialog input:focus, #passwordDialog input:focus { outline: none; box-shadow: 0 0 10px rgba(255, 215, 0, 0.3); }
+
+        #passwordDialog {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2100;
+        }
+        #passwordDialog.hidden { display: none; }
+        #passwordDialog .dialog-content {
+            background: linear-gradient(135deg, #1a1a2e, #0d0d1a);
+            border: 3px solid #ffd700;
+            border-radius: 15px;
+            padding: 30px;
+            text-align: center;
+        }
+        #passwordDialog h3 { color: #ffd700; margin-bottom: 10px; }
         #createAccountDialog .dialog-buttons { display: flex; gap: 10px; justify-content: center; }
         #createAccountDialog button {
             padding: 10px 25px;
@@ -1913,9 +1933,23 @@
         <div class="dialog-content">
             <h3>Create New Account</h3>
             <input type="text" id="newAccountName" placeholder="Enter account name" maxlength="20">
+            <input type="password" id="newAccountPassword" placeholder="Enter password" maxlength="20">
             <div class="dialog-buttons">
                 <button id="confirmCreateBtn" onclick="confirmCreateAccount()">Create</button>
                 <button id="cancelCreateBtn" onclick="hideCreateAccountDialog()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Password Entry Dialog -->
+    <div id="passwordDialog" class="hidden">
+        <div class="dialog-content">
+            <h3>Enter Password</h3>
+            <p id="passwordAccountName" style="color: #ffd700; margin-bottom: 15px;"></p>
+            <input type="password" id="accountPassword" placeholder="Enter password" maxlength="20">
+            <div class="dialog-buttons">
+                <button id="confirmPasswordBtn" onclick="confirmPassword()">Login</button>
+                <button id="cancelPasswordBtn" onclick="hidePasswordDialog()">Cancel</button>
             </div>
         </div>
     </div>
@@ -2342,16 +2376,32 @@
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
+        // ========== SAFE JSON PARSING ==========
+        function safeJSONParse(str, fallback) {
+            if (!str || str === '' || str === 'null' || str === 'undefined') return fallback;
+            try {
+                return JSON.parse(str);
+            } catch (e) {
+                console.error('JSON parse error:', e);
+                return fallback;
+            }
+        }
+
         // ========== ACCOUNT SYSTEM ==========
         const MAX_ACCOUNTS = 3;
         let currentAccountId = null; // null = guest mode
 
         function getAccountsData() {
-            const data = localStorage.getItem('samuraiAccounts');
-            if (!data) {
+            try {
+                const data = localStorage.getItem('samuraiAccounts');
+                if (!data) {
+                    return { activeAccountId: null, accounts: {} };
+                }
+                return JSON.parse(data);
+            } catch (e) {
+                console.error('Error loading accounts:', e);
                 return { activeAccountId: null, accounts: {} };
             }
-            return JSON.parse(data);
         }
 
         function saveAccountsData(data) {
@@ -2367,7 +2417,42 @@
             return 'acc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
         }
 
-        function createAccount(name) {
+        function isNameTaken(name) {
+            const data = getAccountsData();
+            const nameLower = name.trim().toLowerCase();
+            return Object.values(data.accounts).some(acc => acc.name.toLowerCase() === nameLower);
+        }
+
+        function isPasswordTaken(password) {
+            const data = getAccountsData();
+            return Object.values(data.accounts).some(acc => acc.password && acc.password === password);
+        }
+
+        // Migrate old accounts without passwords
+        function migrateOldAccounts() {
+            try {
+                const data = getAccountsData();
+                let needsSave = false;
+                Object.keys(data.accounts).forEach(id => {
+                    if (!data.accounts[id].password) {
+                        // Old account without password - delete it so user can recreate with password
+                        delete data.accounts[id];
+                        if (data.activeAccountId === id) {
+                            data.activeAccountId = null;
+                        }
+                        needsSave = true;
+                    }
+                });
+                if (needsSave) {
+                    saveAccountsData(data);
+                }
+            } catch (e) {
+                console.error('Error migrating accounts:', e);
+            }
+        }
+        migrateOldAccounts();
+
+        function createAccount(name, password) {
             const data = getAccountsData();
             if (Object.keys(data.accounts).length >= MAX_ACCOUNTS) {
                 alert('Maximum 3 accounts allowed!');
@@ -2377,9 +2462,26 @@
                 alert('Please enter a name!');
                 return false;
             }
+            if (!password || password.length === 0) {
+                alert('Please enter a password!');
+                return false;
+            }
+            if (password.length < 3) {
+                alert('Password must be at least 3 characters!');
+                return false;
+            }
+            if (isNameTaken(name)) {
+                alert('This name is already taken!');
+                return false;
+            }
+            if (isPasswordTaken(password)) {
+                alert('This password is already used by another account!');
+                return false;
+            }
             const id = generateAccountId();
             data.accounts[id] = {
                 name: name.trim(),
+                password: password,
                 createdAt: Date.now(),
                 lastPlayed: Date.now(),
                 data: {
@@ -2426,19 +2528,8 @@
         }
 
         function switchAccount(id) {
-            // Save current account first if we have one
-            if (currentAccountId) {
-                saveCurrentToAccount();
-            }
-            const data = getAccountsData();
-            if (!data.accounts[id]) return;
-            data.activeAccountId = id;
-            data.accounts[id].lastPlayed = Date.now();
-            saveAccountsData(data);
-            currentAccountId = id;
-            loadAccountToGame(id);
-            closeAccountOverlay();
-            location.reload(); // Reload to fully refresh state
+            // Show password dialog to verify before switching
+            showPasswordDialog(id);
         }
 
         function switchToGuest() {
@@ -2586,6 +2677,7 @@
         function showCreateAccountDialog() {
             document.getElementById('createAccountDialog').classList.remove('hidden');
             document.getElementById('newAccountName').value = '';
+            document.getElementById('newAccountPassword').value = '';
             document.getElementById('newAccountName').focus();
         }
 
@@ -2595,29 +2687,117 @@
 
         function confirmCreateAccount() {
             const name = document.getElementById('newAccountName').value;
-            if (createAccount(name)) {
+            const password = document.getElementById('newAccountPassword').value;
+            if (createAccount(name, password)) {
                 hideCreateAccountDialog();
                 closeAccountOverlay();
                 location.reload();
             }
         }
 
-        // Initialize account system on load
-        function initAccountSystem() {
+        // Password dialog for account login
+        let pendingLoginAccountId = null;
+
+        function showPasswordDialog(accountId) {
             const data = getAccountsData();
-            currentAccountId = data.activeAccountId;
-            if (currentAccountId && data.accounts[currentAccountId]) {
-                loadAccountToGame(currentAccountId);
-            }
-            updateAccountButton();
+            const acc = data.accounts[accountId];
+            if (!acc) return;
+
+            pendingLoginAccountId = accountId;
+            document.getElementById('passwordAccountName').textContent = acc.name;
+            document.getElementById('accountPassword').value = '';
+            document.getElementById('passwordDialog').classList.remove('hidden');
+            document.getElementById('accountPassword').focus();
         }
 
-        // Handle Enter key in account name input
+        function hidePasswordDialog() {
+            document.getElementById('passwordDialog').classList.add('hidden');
+            pendingLoginAccountId = null;
+        }
+
+        function confirmPassword() {
+            const password = document.getElementById('accountPassword').value;
+            if (!pendingLoginAccountId) return;
+
+            const data = getAccountsData();
+            const acc = data.accounts[pendingLoginAccountId];
+
+            if (!acc) {
+                alert('Account not found!');
+                hidePasswordDialog();
+                return;
+            }
+
+            if (acc.password !== password) {
+                alert('Incorrect password!');
+                document.getElementById('accountPassword').value = '';
+                document.getElementById('accountPassword').focus();
+                return;
+            }
+
+            // Password correct - proceed with switch
+            hidePasswordDialog();
+            performAccountSwitch(pendingLoginAccountId);
+        }
+
+        function performAccountSwitch(id) {
+            // Save current account first if we have one
+            if (currentAccountId) {
+                saveCurrentToAccount();
+            }
+            const data = getAccountsData();
+            if (!data.accounts[id]) return;
+            data.activeAccountId = id;
+            data.accounts[id].lastPlayed = Date.now();
+            saveAccountsData(data);
+            currentAccountId = id;
+            loadAccountToGame(id);
+            closeAccountOverlay();
+            location.reload();
+        }
+
+        // Initialize account system on load
+        function initAccountSystem() {
+            try {
+                const data = getAccountsData();
+                currentAccountId = data.activeAccountId;
+                // Check if active account still exists (may have been deleted by migration)
+                if (currentAccountId && !data.accounts[currentAccountId]) {
+                    data.activeAccountId = null;
+                    saveAccountsData(data);
+                    currentAccountId = null;
+                }
+                if (currentAccountId && data.accounts[currentAccountId]) {
+                    loadAccountToGame(currentAccountId);
+                }
+                updateAccountButton();
+            } catch (e) {
+                console.error('Error initializing account system:', e);
+                currentAccountId = null;
+            }
+        }
+
+        // Handle Enter key in account dialogs
         document.addEventListener('DOMContentLoaded', () => {
-            const input = document.getElementById('newAccountName');
-            if (input) {
-                input.addEventListener('keypress', (e) => {
+            const nameInput = document.getElementById('newAccountName');
+            if (nameInput) {
+                nameInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        // Move focus to password field instead of submitting
+                        document.getElementById('newAccountPassword').focus();
+                    }
+                });
+            }
+            const passwordInput = document.getElementById('newAccountPassword');
+            if (passwordInput) {
+                passwordInput.addEventListener('keypress', (e) => {
                     if (e.key === 'Enter') confirmCreateAccount();
+                });
+            }
+            const loginPasswordInput = document.getElementById('accountPassword');
+            if (loginPasswordInput) {
+                loginPasswordInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') confirmPassword();
                 });
             }
         });
@@ -6165,7 +6345,7 @@
         };
 
         // Track unlocked characters and current selection
-        let unlockedCharacters = JSON.parse(localStorage.getItem('samuraiUnlockedChars')) || ['standard'];
+        let unlockedCharacters = safeJSONParse(localStorage.getItem('samuraiUnlockedChars'), ['standard']);
         let selectedCharacter = localStorage.getItem('samuraiSelectedChar') || 'standard';
         if (!unlockedCharacters.includes(selectedCharacter)) selectedCharacter = 'standard';
 
@@ -6276,8 +6456,8 @@
         };
 
         // XP and unlocked skills per character
-        let characterXP = JSON.parse(localStorage.getItem('samuraiCharXP')) || {};
-        let characterSkills = JSON.parse(localStorage.getItem('samuraiCharSkills')) || {};
+        let characterXP = safeJSONParse(localStorage.getItem('samuraiCharXP'), {});
+        let characterSkills = safeJSONParse(localStorage.getItem('samuraiCharSkills'), {});
 
         function saveSkillData() {
             localStorage.setItem('samuraiCharXP', JSON.stringify(characterXP));
@@ -6750,9 +6930,11 @@
         }
 
         function updateSelectedMapInfo() {
+            if (typeof selectedMap === 'undefined') return; // Not initialized yet
             const map = gameMaps[selectedMap];
+            if (!map) return;
             const info = document.getElementById('selectedMapInfo');
-            info.innerHTML = `${mapIcons[selectedMap]} <strong>${map.name}</strong>`;
+            if (info) info.innerHTML = `${mapIcons[selectedMap]} <strong>${map.name}</strong>`;
         }
 
         function showMapSelect() {
@@ -9136,6 +9318,88 @@
                         break;
                     }
                 }
+
+                // Skip if projectile was already removed
+                if (!playerProjectiles[i]) continue;
+
+                // Check collision with obstacles (arrows can harvest resources)
+                if (proj.isArrow) {
+                    for (const obstacle of obstacles) {
+                        if (harvestedObstacles.has(obstacle) || obstacle.type === 'playerWall') continue;
+
+                        const dx = proj.mesh.position.x - obstacle.x;
+                        const dz = proj.mesh.position.z - obstacle.z;
+                        const dist = Math.sqrt(dx * dx + dz * dz);
+
+                        if (dist < obstacle.radius + 0.5) {
+                            // Hit obstacle - harvest it
+                            let resourceType = null;
+                            let amount = 1;
+
+                            switch(obstacle.type) {
+                                case 'tree': resourceType = 'wood'; amount = 4; break;
+                                case 'giantTree': resourceType = 'wood'; amount = 10; break;
+                                case 'log': resourceType = 'wood'; amount = 2; break;
+                                case 'boulder': resourceType = 'ore'; amount = 6; break;
+                                case 'rock': resourceType = 'rock'; amount = 4; break;
+                                case 'platform': resourceType = 'rock'; amount = 2; break;
+                                case 'berryBush': resourceType = 'food'; amount = 4; break;
+                            }
+
+                            if (resourceType) {
+                                addResource(resourceType, amount);
+                                harvestedObstacles.add(obstacle);
+                                if (obstacle.mesh) obstacle.mesh.visible = false;
+                                showAbilityEffect(`+${amount} ${resourceType}!`);
+                            }
+
+                            scene.remove(proj.mesh);
+                            playerProjectiles.splice(i, 1);
+                            break;
+                        }
+                    }
+                }
+
+                // Skip if projectile was already removed
+                if (!playerProjectiles[i]) continue;
+
+                // Check collision with animals (arrows can hunt)
+                if (proj.isArrow) {
+                    for (let a = animals.length - 1; a >= 0; a--) {
+                        const animal = animals[a];
+                        if (!animal || !animal.mesh) continue;
+
+                        const dx = proj.mesh.position.x - animal.mesh.position.x;
+                        const dz = proj.mesh.position.z - animal.mesh.position.z;
+                        const dist = Math.sqrt(dx * dx + dz * dz);
+
+                        if (dist < 1.5) {
+                            // Hit animal
+                            animal.health -= proj.damage;
+
+                            // Flash red
+                            animal.mesh.children.forEach(child => {
+                                if (child.material && child.material.emissive) {
+                                    child.material.emissive.setHex(0xff0000);
+                                    setTimeout(() => { child.material.emissive.setHex(0x000000); }, 100);
+                                }
+                            });
+
+                            // Check if dead
+                            if (animal.health <= 0) {
+                                const foodAmount = animal.foodAmount * 3; // Triple food from animals
+                                addResource('food', foodAmount);
+                                showAbilityEffect(`+${foodAmount} food!`);
+                                if (animal.mesh) scene.remove(animal.mesh);
+                                animals.splice(a, 1);
+                            }
+
+                            scene.remove(proj.mesh);
+                            playerProjectiles.splice(i, 1);
+                            break;
+                        }
+                    }
+                }
             }
         }
 
@@ -9648,8 +9912,8 @@
         };
 
         // Track unlocked and active relics
-        let unlockedRelics = JSON.parse(localStorage.getItem('samuraiUnlockedRelics')) || [];
-        let activeRelics = JSON.parse(localStorage.getItem('samuraiActiveRelics')) || [];
+        let unlockedRelics = safeJSONParse(localStorage.getItem('samuraiUnlockedRelics'), []);
+        let activeRelics = safeJSONParse(localStorage.getItem('samuraiActiveRelics'), []);
         const MAX_ACTIVE_RELICS = 3;
         const RELIC_XP_PENALTY = 0.15; // 15% XP reduction per active relic
 
@@ -9799,10 +10063,10 @@
         ];
 
         // Quest state
-        let activeQuest = JSON.parse(localStorage.getItem('samuraiActiveQuest')) || null;
-        let questProgress = JSON.parse(localStorage.getItem('samuraiQuestProgress')) || {};
-        let currentQuestSelection = JSON.parse(localStorage.getItem('samuraiQuestSelection')) || [];
-        let completedQuests = JSON.parse(localStorage.getItem('samuraiCompletedQuests')) || [];
+        let activeQuest = safeJSONParse(localStorage.getItem('samuraiActiveQuest'), null);
+        let questProgress = safeJSONParse(localStorage.getItem('samuraiQuestProgress'), {});
+        let currentQuestSelection = safeJSONParse(localStorage.getItem('samuraiQuestSelection'), []);
+        let completedQuests = safeJSONParse(localStorage.getItem('samuraiCompletedQuests'), []);
         let questRefreshes = parseInt(localStorage.getItem('samuraiQuestRefreshes')) || 1; // Start with 1 free refresh
 
         // Quest tracking variables (reset each game)
@@ -10160,7 +10424,7 @@
 
         // Map unlock order - beat one to unlock the next
         const mapOrder = ['forest', 'desert', 'volcano', 'frost', 'swamp', 'shadow', 'crystal', 'graveyard', 'sky', 'abyss'];
-        let unlockedMaps = JSON.parse(localStorage.getItem('samuraiUnlockedMaps')) || ['forest'];
+        let unlockedMaps = safeJSONParse(localStorage.getItem('samuraiUnlockedMaps'), ['forest']);
         let selectedMap = localStorage.getItem('samuraiSelectedMap') || 'forest';
 
         function saveMapUnlocks() {
@@ -11622,6 +11886,55 @@
             return tree;
         }
 
+        // Create a berry bush (gives food when harvested)
+        function createBerryBush(x, z, size = 1) {
+            const bush = new THREE.Group();
+
+            // Bush base (green foliage)
+            const bushMat = new THREE.MeshStandardMaterial({ color: 0x2d5a27, roughness: 0.85 });
+            const bushGeo = new THREE.SphereGeometry(0.8 * size, 8, 6);
+            const bushMesh = new THREE.Mesh(bushGeo, bushMat);
+            bushMesh.position.y = 0.6 * size;
+            bushMesh.scale.y = 0.7;
+            bushMesh.castShadow = true;
+            bush.add(bushMesh);
+
+            // Add berries (small red/purple spheres)
+            const berryMat = new THREE.MeshStandardMaterial({ color: 0xcc2255, roughness: 0.6, metalness: 0.1 });
+            const berryPositions = [
+                { x: 0.4, y: 0.8, z: 0.3 },
+                { x: -0.3, y: 0.7, z: 0.4 },
+                { x: 0.2, y: 0.9, z: -0.3 },
+                { x: -0.4, y: 0.6, z: -0.2 },
+                { x: 0.1, y: 1.0, z: 0.1 },
+                { x: -0.2, y: 0.75, z: 0.35 },
+                { x: 0.35, y: 0.65, z: -0.15 }
+            ];
+            for (const pos of berryPositions) {
+                const berryGeo = new THREE.SphereGeometry(0.08 * size, 6, 4);
+                const berry = new THREE.Mesh(berryGeo, berryMat);
+                berry.position.set(pos.x * size, pos.y * size, pos.z * size);
+                berry.castShadow = true;
+                bush.add(berry);
+            }
+
+            bush.position.set(x, 0, z);
+            scene.add(bush);
+            environmentObjects.push(bush);
+
+            obstacles.push({
+                mesh: bush,
+                x: x,
+                z: z,
+                radius: 0.9 * size,
+                height: 1.2 * size,
+                type: 'berryBush',
+                isBlocking: false // Can walk through
+            });
+
+            return bush;
+        }
+
         // Create a GIANT tree
         function createGiantTree(x, z, size = 2.5) {
             const tree = new THREE.Group();
@@ -11746,56 +12059,275 @@
             return log;
         }
 
-        // Spawn obstacles around the arena
+        // Spawn obstacles around the arena - unique layout per map
         function spawnObstacles() {
             // Create the lake first
             createLake();
 
-            // MASSIVE BOULDERS
-            createBoulder(35, -25, 3.5);
-            createBoulder(-40, -35, 4.0);
-            createBoulder(45, 30, 3.0);
-            createBoulder(-35, 0, 3.2);
+            // Get current map for layout selection
+            const mapId = selectedMap || 'forest';
 
-            // GIANT TREES
-            createGiantTree(30, 35, 2.8);
-            createGiantTree(-45, 20, 3.0);
-            createGiantTree(40, -10, 2.5);
-            createGiantTree(-30, -40, 2.7);
-            createGiantTree(0, 40, 2.6);
+            switch(mapId) {
+                case 'forest':
+                    // Dense forest with many trees and a clearing in center
+                    createGiantTree(30, 35, 2.8);
+                    createGiantTree(-45, 20, 3.0);
+                    createGiantTree(40, -10, 2.5);
+                    createGiantTree(-30, -40, 2.7);
+                    createGiantTree(0, 40, 2.6);
+                    createTree(-12, 15, 1.0);
+                    createTree(20, 18, 1.2);
+                    createTree(-22, -18, 0.9);
+                    createTree(15, -20, 1.1);
+                    createTree(25, -15, 0.8);
+                    createTree(10, 10, 1.1);
+                    createTree(-50, 30, 1.3);
+                    createTree(-15, 35, 1.1);
+                    createTree(-45, 15, 1.0);
+                    createRock(-15, -15, 1.2);
+                    createRock(18, -12, 0.9);
+                    createBoulder(35, -25, 3.5);
+                    createBoulder(-40, -35, 4.0);
+                    createLog(-5, 20, Math.PI / 4);
+                    createLog(22, 0, Math.PI / 2);
+                    // Berry bushes
+                    createBerryBush(-8, 25, 1.0);
+                    createBerryBush(28, -5, 0.9);
+                    createBerryBush(-25, -10, 1.1);
+                    break;
 
-            // Regular rocks
-            createRock(-15, -15, 1.2);
-            createRock(18, -12, 0.9);
-            createRock(-20, 10, 1.0);
-            createRock(12, 20, 1.3);
-            createRock(25, 5, 1.1);
-            createRock(8, -18, 0.7);
+                case 'desert':
+                    // Sparse with rock formations and boulders, oasis area
+                    createBoulder(25, -30, 4.0);
+                    createBoulder(-35, -25, 3.5);
+                    createBoulder(40, 20, 3.8);
+                    createBoulder(-45, 35, 3.2);
+                    createBoulder(0, -40, 4.5);
+                    createRock(-20, 15, 1.5);
+                    createRock(15, 25, 1.3);
+                    createRock(-10, -20, 1.4);
+                    createRock(30, 5, 1.2);
+                    createRock(-30, 0, 1.6);
+                    createRock(20, -15, 1.1);
+                    createPlatform(0, 0, 1.5);
+                    createPlatform(-15, -15, 1.0);
+                    createPlatform(15, 15, 1.2);
+                    // Few palm trees near oasis
+                    createTree(-40, 25, 1.3);
+                    createTree(-35, 30, 1.1);
+                    // Berry bushes (desert berries)
+                    createBerryBush(10, -8, 0.8);
+                    createBerryBush(-18, 5, 0.9);
+                    createBerryBush(5, 30, 0.85);
+                    break;
 
-            // Regular trees
-            createTree(-12, 15, 1.0);
-            createTree(20, 18, 1.2);
-            createTree(-22, -18, 0.9);
-            createTree(15, -20, 1.1);
-            createTree(25, -15, 0.8);
-            createTree(10, 10, 1.1);
+                case 'volcano':
+                    // Rocky terrain with lava rocks, few organic obstacles
+                    createBoulder(20, -25, 4.5);
+                    createBoulder(-30, -30, 4.0);
+                    createBoulder(35, 25, 3.8);
+                    createBoulder(-40, 20, 4.2);
+                    createBoulder(-15, 35, 3.5);
+                    createBoulder(45, -10, 3.3);
+                    createRock(-10, -10, 1.8);
+                    createRock(15, -18, 1.5);
+                    createRock(-25, 10, 1.6);
+                    createRock(8, 20, 1.4);
+                    createRock(25, 0, 1.7);
+                    createRock(-5, -25, 1.3);
+                    createRock(30, -35, 1.5);
+                    createPlatform(0, 10, 1.2);
+                    createPlatform(-20, -5, 1.0);
+                    createPlatform(20, -5, 1.1);
+                    // Berry bushes (heat-resistant)
+                    createBerryBush(-12, 18, 0.7);
+                    createBerryBush(22, 12, 0.8);
+                    createBerryBush(-8, -18, 0.75);
+                    break;
 
-            // Trees around the lake
-            createTree(-50, 30, 1.3);
-            createTree(-15, 35, 1.1);
-            createTree(-45, 15, 1.0);
+                case 'frost':
+                    // Frozen trees, ice formations, scattered layout
+                    createGiantTree(-35, 30, 2.5);
+                    createGiantTree(40, -25, 2.8);
+                    createGiantTree(-25, -35, 2.6);
+                    createTree(15, 20, 1.0);
+                    createTree(-18, 12, 1.1);
+                    createTree(25, -10, 0.9);
+                    createTree(-10, -22, 1.0);
+                    createTree(35, 15, 1.2);
+                    createBoulder(30, 30, 3.0);
+                    createBoulder(-40, -15, 3.2);
+                    createBoulder(10, -35, 2.8);
+                    createRock(-15, 25, 1.3);
+                    createRock(20, 5, 1.1);
+                    createRock(-8, -8, 1.2);
+                    createLog(5, 15, Math.PI / 3);
+                    createLog(-25, -5, Math.PI / 6);
+                    // Berry bushes (winter berries)
+                    createBerryBush(8, -15, 0.9);
+                    createBerryBush(-20, 0, 1.0);
+                    createBerryBush(0, 25, 0.85);
+                    break;
 
-            // Platforms
-            createPlatform(0, 15, 1.0);
-            createPlatform(0, -15, 0.8);
-            createPlatform(15, 0, 0.9);
-            createPlatform(-15, 0, 1.1);
+                case 'swamp':
+                    // Many trees, logs, murky with obstacles clustered
+                    createGiantTree(-30, 25, 3.0);
+                    createGiantTree(35, -30, 2.8);
+                    createGiantTree(-40, -20, 2.7);
+                    createGiantTree(25, 35, 2.9);
+                    createTree(-15, 10, 1.1);
+                    createTree(10, 15, 1.0);
+                    createTree(-20, -15, 1.2);
+                    createTree(18, -12, 0.9);
+                    createTree(-8, 25, 1.0);
+                    createTree(22, 8, 1.1);
+                    createTree(-25, 5, 0.95);
+                    createLog(-5, -8, Math.PI / 4);
+                    createLog(12, -20, Math.PI / 2);
+                    createLog(-18, 18, 0);
+                    createLog(8, 28, Math.PI / 5);
+                    createLog(-30, -30, Math.PI / 3);
+                    createRock(5, -30, 1.0);
+                    createRock(-35, 10, 1.2);
+                    // Berry bushes
+                    createBerryBush(-5, 5, 1.1);
+                    createBerryBush(15, -5, 1.0);
+                    createBerryBush(-12, -25, 0.95);
+                    break;
 
-            // Logs
-            createLog(-5, 20, Math.PI / 4);
-            createLog(22, 0, Math.PI / 2);
-            createLog(-20, -20, 0);
-            createLog(5, -25, Math.PI / 3);
+                case 'shadow':
+                    // Dark realm with mysterious rock formations
+                    createBoulder(0, -35, 4.0);
+                    createBoulder(-35, 0, 3.8);
+                    createBoulder(35, 0, 3.5);
+                    createBoulder(0, 35, 3.7);
+                    createGiantTree(-25, -25, 2.5);
+                    createGiantTree(25, 25, 2.6);
+                    createGiantTree(-25, 25, 2.4);
+                    createGiantTree(25, -25, 2.7);
+                    createRock(-12, 12, 1.4);
+                    createRock(12, -12, 1.3);
+                    createRock(-12, -12, 1.5);
+                    createRock(12, 12, 1.2);
+                    createPlatform(0, 0, 1.5);
+                    createPlatform(-20, 20, 0.8);
+                    createPlatform(20, -20, 0.9);
+                    // Berry bushes (shadow berries)
+                    createBerryBush(-8, 0, 0.85);
+                    createBerryBush(8, 0, 0.9);
+                    createBerryBush(0, -12, 0.8);
+                    break;
+
+                case 'crystal':
+                    // Crystal formations, geometric layout
+                    createBoulder(20, 20, 3.5);
+                    createBoulder(-20, 20, 3.3);
+                    createBoulder(20, -20, 3.4);
+                    createBoulder(-20, -20, 3.6);
+                    createBoulder(0, 40, 4.0);
+                    createBoulder(0, -40, 3.8);
+                    createRock(10, 0, 1.5);
+                    createRock(-10, 0, 1.4);
+                    createRock(0, 10, 1.3);
+                    createRock(0, -10, 1.6);
+                    createRock(30, 10, 1.2);
+                    createRock(-30, -10, 1.3);
+                    createPlatform(15, 15, 1.0);
+                    createPlatform(-15, -15, 1.1);
+                    createPlatform(-15, 15, 0.9);
+                    createPlatform(15, -15, 1.0);
+                    // Berry bushes
+                    createBerryBush(5, 25, 0.9);
+                    createBerryBush(-25, 5, 0.85);
+                    createBerryBush(25, -5, 0.95);
+                    break;
+
+                case 'graveyard':
+                    // Scattered tombstones (platforms), dead trees
+                    createGiantTree(-40, 30, 2.2);
+                    createGiantTree(35, -35, 2.4);
+                    createTree(-15, -20, 0.8);
+                    createTree(20, 15, 0.9);
+                    createTree(-25, 10, 0.85);
+                    createTree(10, -25, 0.9);
+                    createPlatform(-10, 10, 0.7);
+                    createPlatform(10, -10, 0.6);
+                    createPlatform(-5, -15, 0.65);
+                    createPlatform(15, 5, 0.7);
+                    createPlatform(-20, -5, 0.6);
+                    createPlatform(5, 20, 0.75);
+                    createPlatform(-15, 25, 0.65);
+                    createPlatform(25, -15, 0.7);
+                    createRock(30, 25, 1.1);
+                    createRock(-30, -25, 1.2);
+                    createBoulder(-35, -35, 2.5);
+                    createBoulder(40, 30, 2.8);
+                    // Berry bushes
+                    createBerryBush(0, 0, 0.8);
+                    createBerryBush(-18, 18, 0.75);
+                    createBerryBush(18, -18, 0.85);
+                    break;
+
+                case 'sky':
+                    // Floating platforms, minimal ground obstacles
+                    createPlatform(0, 0, 1.8);
+                    createPlatform(20, 0, 1.3);
+                    createPlatform(-20, 0, 1.4);
+                    createPlatform(0, 20, 1.2);
+                    createPlatform(0, -20, 1.5);
+                    createPlatform(25, 25, 1.0);
+                    createPlatform(-25, 25, 1.1);
+                    createPlatform(25, -25, 1.2);
+                    createPlatform(-25, -25, 1.0);
+                    createRock(10, 10, 0.8);
+                    createRock(-10, -10, 0.9);
+                    createRock(10, -10, 0.85);
+                    createRock(-10, 10, 0.75);
+                    createBoulder(35, 10, 2.5);
+                    createBoulder(-35, -10, 2.8);
+                    createTree(15, 30, 0.9);
+                    createTree(-15, -30, 0.85);
+                    // Berry bushes
+                    createBerryBush(12, -5, 0.7);
+                    createBerryBush(-12, 5, 0.75);
+                    createBerryBush(0, 12, 0.8);
+                    break;
+
+                case 'abyss':
+                    // Sparse, dangerous terrain with large gaps
+                    createBoulder(0, 0, 5.0);
+                    createBoulder(40, 40, 3.5);
+                    createBoulder(-40, -40, 3.8);
+                    createBoulder(-40, 40, 3.3);
+                    createBoulder(40, -40, 3.6);
+                    createRock(20, 10, 1.8);
+                    createRock(-20, -10, 1.6);
+                    createRock(10, -20, 1.5);
+                    createRock(-10, 20, 1.7);
+                    createGiantTree(30, -15, 2.3);
+                    createGiantTree(-30, 15, 2.5);
+                    createPlatform(15, 25, 1.0);
+                    createPlatform(-15, -25, 1.1);
+                    createLog(25, 5, Math.PI / 4);
+                    createLog(-25, -5, Math.PI / 2);
+                    // Berry bushes
+                    createBerryBush(8, 8, 0.9);
+                    createBerryBush(-8, -8, 0.85);
+                    createBerryBush(0, -15, 0.8);
+                    break;
+
+                default:
+                    // Fallback to forest layout
+                    createGiantTree(30, 35, 2.8);
+                    createGiantTree(-45, 20, 3.0);
+                    createTree(-12, 15, 1.0);
+                    createTree(20, 18, 1.2);
+                    createRock(-15, -15, 1.2);
+                    createBoulder(35, -25, 3.5);
+                    createBerryBush(-8, 25, 1.0);
+                    createBerryBush(28, -5, 0.9);
+                    createBerryBush(-25, -10, 1.1);
+            }
         }
 
         // Spawn the obstacles
@@ -18082,32 +18614,37 @@
                         switch(obstacle.type) {
                             case 'tree':
                                 resourceType = 'wood';
-                                amount = 2;
+                                amount = 4; // Double (was 2)
                                 break;
                             case 'giantTree':
                                 resourceType = 'wood';
-                                amount = 5;
+                                amount = 10; // Double (was 5)
                                 break;
                             case 'log':
                                 resourceType = 'wood';
-                                amount = 1;
+                                amount = 2; // Double (was 1)
                                 break;
                             case 'boulder':
                                 resourceType = 'ore';
-                                amount = 3;
+                                amount = 6; // Double (was 3)
                                 break;
                             case 'rock':
                                 resourceType = 'rock';
-                                amount = 2;
+                                amount = 4; // Double (was 2)
                                 break;
                             case 'platform':
                                 resourceType = 'rock';
-                                amount = 1;
+                                amount = 2; // Double (was 1)
+                                break;
+                            case 'berryBush':
+                                resourceType = 'food';
+                                amount = 4; // Berry bushes give food
                                 break;
                         }
 
                         if (resourceType) {
                             addResource(resourceType, amount);
+                            showAbilityEffect(`+${amount} ${resourceType}!`);
 
                             // Mark as harvested and hide
                             harvestedObstacles.add(obstacle);
@@ -18375,7 +18912,9 @@
 
                         // Check if dead
                         if (animal.health <= 0) {
-                            addResource('food', animal.foodAmount);
+                            const foodAmount = animal.foodAmount * 3; // Triple food from animals
+                            addResource('food', foodAmount);
+                            showAbilityEffect(`+${foodAmount} food!`);
                             if (animal.mesh) scene.remove(animal.mesh);
                             animals.splice(i, 1);
                         }
